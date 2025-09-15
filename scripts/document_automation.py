@@ -2,12 +2,35 @@ from playwright.sync_api import sync_playwright, Page
 import pyautogui as gui
 import time
 from datetime import datetime, timedelta
+import pandas as pd
 
 proxy_host = "10.141.6.12"
 proxy_port = 80
+chave_not = '33250947508411264641551100000702955335309202'
+
+def scrap_nf(page):
+    page.wait_for_selector("div.t-grid-content table tbody tr")
+
+    linhas = page.query_selector_all("div.t-grid-content table tbody tr")
+    notas = []
+
+    for idx, linha in enumerate(linhas):
+        colunas = linha.query_selector_all("td")
+        #print(f"\n➡ Linha {idx} tem {len(colunas)} colunas")
+        valores = [c.inner_text().strip() for c in colunas]
+        #print(valores)  # 
+
+        if not colunas:
+            continue
+
+        # Monta dicionário dinâmico
+        nota = {f"col_{i}": colunas[i].inner_text().strip() for i in range(len(colunas))}
+        notas.append(nota)
+
+    return notas
+
 
 def scrap_metadados(page):
-    import time
     for _ in range(5):  # tenta 5x
         try:
             metadados = {}
@@ -23,8 +46,8 @@ def scrap_metadados(page):
                     metadados['meta'][name] = content
             return metadados
         except:
-            time.sleep(1)  # espera 1 segundo e tenta novamente
-    raise Exception("Não foi possível capturar os metadados: página ainda não carregou totalmente")
+            time.sleep(1)
+    raise Exception("Não foi possível capturar os metadados")
 
 
 with sync_playwright() as p:
@@ -75,14 +98,10 @@ with sync_playwright() as p:
 
     # --- SCRAPING DOS METADADOS ---
     time.sleep(7)  # espera a página final carregar
-    
     page.wait_for_load_state("networkidle")  
-    time.sleep(2)  # pequeno delay extra se necessário
-    # metadados = scrap_metadados(page)
-    # print("Metadados coletados:")
-    # print(metadados)
     time.sleep(2)
-    gui.moveTo(215,618)
+
+    gui.moveTo(215, 618)
     gui.leftClick()
     time.sleep(1)
 
@@ -93,11 +112,40 @@ with sync_playwright() as p:
     for data in date_initial:
         gui.write(data)
     time.sleep(1)
-    gui.moveTo(147,976)
-    gui.leftClick()
-    print("Login realizado! Navegador permanece aberto.")
-    input("Pressione Enter no terminal para finalizar o script...")  # mantém o navegador aberto
 
-    
-  
-    
+    for i in range(5):
+        gui.hotkey('tab')
+
+    for nota in chave_not:
+        gui.write(nota)
+        
+    time.sleep(1)
+    gui.moveTo(147, 976)
+    gui.leftClick()
+    time.sleep(3)
+
+    metadados = scrap_metadados(page)
+    print("Metadados coletados:")
+    print(metadados)
+
+    print("\nColetando notas fiscais da tabela...")
+    notas = scrap_nf(page)
+
+    linhas_normalizadas = []
+    for n in notas:
+        linha = [n.get(f"col_{i}", "") for i in range(20)]
+        linhas_normalizadas.append(linha)
+
+    colunas = [f"col_{i}" for i in range(20)]
+    df = pd.DataFrame(linhas_normalizadas, columns=colunas)
+
+    rejeitadas = df[df['col_7'].str.contains("Rejeitado|Pendente", na=False)]
+
+    print("\n📌 Todas as notas normalizadas:")
+    print(df.head())
+
+    print("\n❌ Notas rejeitadas/pendentes:")
+    print(rejeitadas[['col_2','col_1','col_6','col_7','col_19']])
+
+    print("\nLogin realizado! Navegador permanece aberto.")
+    input("Pressione Enter no terminal para finalizar o script...")
