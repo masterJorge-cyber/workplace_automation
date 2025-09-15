@@ -25,3 +25,8 @@ O objetivo deste repositório é centralizar scripts e ferramentas que facilitem
 1. Clone este repositório:  
    ```bash
    git clone https://github.com/masterJorge-cyber/workplace_automation.git
+
+## 🛠️ Instalar o conda environment
+1. conda env create -f environment.yml
+2. conda activate workplace_automation
+
