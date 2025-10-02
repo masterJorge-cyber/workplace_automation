@@ -63,7 +63,6 @@ with sync_playwright() as p:
     page.wait_for_load_state("networkidle")
     time.sleep(2)
 
-    # --- LOGIN COM PyAutoGUI ---
     gui.moveTo(684, 472)
     gui.leftClick()
     email = 'eduardo.barros@gpabr.com'
@@ -146,6 +145,8 @@ with sync_playwright() as p:
 
     print("\n❌ Notas rejeitadas/pendentes:")
     print(rejeitadas[['col_2','col_1','col_6','col_7','col_19']])
+
+    page.reload()  
 
     print("\nLogin realizado! Navegador permanece aberto.")
     input("Pressione Enter no terminal para finalizar o script...")
