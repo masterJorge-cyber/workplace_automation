@@ -306,7 +306,7 @@ class AuthManager:
         
         time.sleep(1)
         
-        # 2. Preencher status "Rejeitado" no campo StatusId-input
+        # 2. Preencher status "Rejeitado" no campo StatusId-input + TAB + espera
         logger.info("2. 🚫 Preenchendo status 'Rejeitado'...")
         status_selectors = [
             "input[name='StatusId-input']",
@@ -320,12 +320,12 @@ class AuthManager:
             if self.wait_and_fill(selector, "Rejeitado", "status Rejeitado"):
                 status_preenchido = True
                 logger.info(f"✅ Status 'Rejeitado' preenchido com: {selector}")
+                
+                # 🔥 NOVO: Tab + espera de 1 segundo após escrever "Rejeitado"
+                self.page.keyboard.press("Tab")
+                logger.info("   ↪️  Tab pressionado após status")
+                time.sleep(1)  # 🔥 Espera 1 segundo após o Tab
                 break
-        
-        if not status_preenchido:
-            logger.warning("⚠️  Não consegui encontrar campo StatusId-input, continuando sem filtrar por status...")
-        
-        time.sleep(1)
         
         # 3. Preencher data inicial (StartDate) - 30 dias atrás
         logger.info("3. 📅 Preenchendo data inicial...")
