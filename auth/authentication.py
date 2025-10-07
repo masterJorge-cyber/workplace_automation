@@ -397,7 +397,6 @@ class AuthManager:
         logger.info("✅ Pesquisa finalizada!")
         return True
 
-    
     def extract_invoice_data(self, nota_fiscal: str):
         """Extrai todos os dados da linha da nota fiscal da tabela"""
         logger.info(f"📊 Extraindo dados completos para nota: {nota_fiscal}")
@@ -405,50 +404,83 @@ class AuthManager:
         try:
             # Aguardar tabela de resultados carregar
             try:
-                self.page.wait_for_selector("table", timeout=5000)
-                time.sleep(2)
+                self.page.wait_for_selector("table", timeout=10000)
+                time.sleep(3)
             except:
                 logger.info(f"🔍 Tabela não encontrada - nota não existe: {nota_fiscal}")
                 return {"nota_fiscal": nota_fiscal, "status": "Não tem nota", "dados_completos": {}}
             
-            # Encontrar a linha que contém a nota fiscal
+            # BUSCAR PELA NOTA FISCAL - Estratégia mais abrangente
             linhas = self.page.query_selector_all("table tr")
             linha_encontrada = None
             
             for linha in linhas:
                 try:
                     texto_linha = linha.inner_text()
+                    
+                    # Estratégias de busca:
+                    # 1. Busca direta pela nota completa
                     if nota_fiscal in texto_linha:
                         linha_encontrada = linha
-                        logger.info(f"✅ Linha da nota encontrada na tabela")
+                        logger.info(f"✅ Nota encontrada (busca direta): {nota_fiscal}")
                         break
-                except:
+                    
+                    # 2. Busca pelos últimos dígitos (pode estar truncada)
+                    ultimos_12_digitos = nota_fiscal[-12:]
+                    if ultimos_12_digitos in texto_linha:
+                        linha_encontrada = linha
+                        logger.info(f"✅ Nota encontrada (últimos 12 dígitos): {ultimos_12_digitos}")
+                        break
+                        
+                    # 3. Busca por parte da chave (pode estar em colunas diferentes)
+                    partes_nota = [nota_fiscal[i:i+8] for i in range(0, len(nota_fiscal), 8)]
+                    for parte in partes_nota:
+                        if parte in texto_linha:
+                            linha_encontrada = linha
+                            logger.info(f"✅ Nota encontrada (parte: {parte})")
+                            break
+                    if linha_encontrada:
+                        break
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️  Erro ao buscar linha: {e}")
                     continue
             
             if not linha_encontrada:
-                logger.info(f"🔍 Nota não encontrada na tabela: {nota_fiscal}")
+                logger.info(f"🔍 Nota não encontrada na tabela após busca completa: {nota_fiscal}")
+                # DEBUG: Mostra o que tem na tabela
+                try:
+                    primeira_linha = self.page.query_selector("table tr")
+                    if primeira_linha:
+                        logger.info(f"🔍 Primeira linha da tabela: {primeira_linha.inner_text()[:200]}...")
+                except:
+                    pass
                 return {"nota_fiscal": nota_fiscal, "status": "Não tem nota", "dados_completos": {}}
             
-            # Marcar a checkbox da linha
+            # EXTRAIR DADOS DA LINHA ENCONTRADA
+            logger.info("🎯 Extraindo dados da linha encontrada...")
+            
+            # 1. Marcar a checkbox
             checkbox = linha_encontrada.query_selector("input[type='checkbox'][name='checkedRecords']")
             if checkbox:
                 try:
                     checkbox.check()
-                    logger.info("✅ Checkbox marcada")
+                    valor_checkbox = checkbox.get_attribute('value') or ''
+                    logger.info(f"✅ Checkbox marcada - Value: {valor_checkbox}")
                     time.sleep(1)
                 except Exception as e:
                     logger.warning(f"⚠️  Não consegui marcar a checkbox: {e}")
             
-            # Extrair todas as células da linha
+            # 2. Extrair todas as células
             celulas = linha_encontrada.query_selector_all("td")
             dados_linha = {}
             
-            # Cabeçalhos prováveis da tabela (baseado no HTML que você mostrou)
+            # Mapeamento baseado no HTML que você mostrou
             headers = [
-                'checkbox', 'codigo', 'numero', 'chave_acesso', 'chave_consulta', 
-                'tipo', 'data_processamento', 'status', 'icone1', 'icone2', 
-                'icone3', 'icone4', 'icone5', 'valor', 'valor_oculto', 
-                'data_emissao', 'id_interno', 'empresa', 'oculto', 'observacao'
+                'checkbox', 'codigo', 'numero_documento', 'chave_acesso', 'chave_consulta', 
+                'tipo_documento', 'data_processamento', 'status', 'icone1', 'icone2', 
+                'icone3', 'icone4', 'icone5', 'valor_total', 'valor_oculto', 
+                'data_emissao', 'id_interno', 'nome_empresa', 'oculto', 'observacao'
             ]
             
             for i, celula in enumerate(celulas):
@@ -458,32 +490,40 @@ class AuthManager:
                     dados_linha[chave] = valor
                     logger.info(f"   📝 {chave}: {valor}")
                 else:
-                    # Para colunas extras
-                    chave = f"coluna_{i}"
+                    chave = f"coluna_extra_{i}"
                     valor = celula.inner_text().strip()
                     dados_linha[chave] = valor
             
-            # Extrair status específico (removendo o link de ajuda)
-            status_celula = linha_encontrada.query_selector("td:nth-child(8)")  # 8ª coluna é o status
-            if status_celula:
-                # Remove o conteúdo do link de ajuda para pegar só o texto do status
-                status_texto = status_celula.inner_text()
-                # Pega apenas a primeira parte (antes do link)
-                status_limpo = status_texto.split('Clique aqui')[0].strip() if 'Clique aqui' in status_texto else status_texto
+            # 3. Extrair dados específicos importantes
+            # Status limpo (sem o link de ajuda)
+            if celulas and len(celulas) > 7:
+                status_com_limpeza = celulas[7].inner_text()
+                status_limpo = status_com_limpeza.split('Clique aqui')[0].strip() if 'Clique aqui' in status_com_limpeza else status_com_limpeza
                 dados_linha['status_limpo'] = status_limpo
-                logger.info(f"✅ Status limpo: {status_limpo}")
-            else:
-                dados_linha['status_limpo'] = dados_linha.get('status', 'Status não encontrado')
+                logger.info(f"✅ Status detalhado: {status_limpo}")
             
-            # Extrair observação específica
+            # Observação completa
             observacao_celula = linha_encontrada.query_selector("td.t-last")
             if observacao_celula:
-                dados_linha['observacao_detalhada'] = observacao_celula.inner_text().strip()
-                logger.info(f"📋 Observação: {dados_linha['observacao_detalhada']}")
+                observacao = observacao_celula.inner_text().strip()
+                dados_linha['observacao_completa'] = observacao
+                logger.info(f"📋 Observação completa: {observacao}")
+            
+            # Cor da linha (indica status)
+            cor_linha = linha_encontrada.get_attribute('style') or ''
+            if 'color: rgb(255, 0, 0)' in cor_linha:
+                dados_linha['cor_status'] = 'VERMELHO-REJEITADO'
+                logger.info("🎨 Status visual: REJEITADO (vermelho)")
+            
+            # Valor do checkbox
+            if checkbox:
+                dados_linha['checkbox_value'] = valor_checkbox
+            
+            logger.info(f"✅ Dados extraídos com sucesso: {len(dados_linha)} campos")
             
             return {
                 "nota_fiscal": nota_fiscal,
-                "status": dados_linha.get('status_limpo', 'Status não encontrado'),
+                "status": dados_linha.get('status_limpo', dados_linha.get('status', 'Status não encontrado')),
                 "dados_completos": dados_linha
             }
             
@@ -493,9 +533,16 @@ class AuthManager:
                 "nota_fiscal": nota_fiscal,
                 "status": f"Erro: {e}",
                 "dados_completos": {}
-            }
+            }    
+    
     def extract_invoice_status(self, nota_fiscal: str):
-        """Método legado para compatibilidade - usa extract_invoice_data"""
-        logger.info("⚠️  Usando método legado extract_invoice_status, migre para extract_invoice_data")
+        """Método legado para compatibilidade - usa extract_invoice_data mas retorna apenas o status"""
+        logger.info("⚠️  Usando método legado extract_invoice_status")
         resultado = self.extract_invoice_data(nota_fiscal)
-        return resultado['status']
+        
+        # Se extract_invoice_data retornar a estrutura completa, extrai apenas o status
+        if isinstance(resultado, dict) and 'status' in resultado:
+            return resultado['status']
+        else:
+            # Se já for apenas o status, retorna direto
+            return resultado
