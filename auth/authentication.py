@@ -320,11 +320,11 @@ class AuthManager:
             if self.wait_and_fill(selector, "Rejeitado", "status Rejeitado"):
                 status_preenchido = True
                 logger.info(f"✅ Status 'Rejeitado' preenchido com: {selector}")
-                
+                    
                 # 🔥 NOVO: Tab + espera de 1 segundo após escrever "Rejeitado"
                 self.page.keyboard.press("Tab")
                 logger.info("   ↪️  Tab pressionado após status")
-                time.sleep(1)  # 🔥 Espera 1 segundo após o Tab
+                time.sleep(0.1)  # 🔥 Espera 1 segundo após o Tab
                 break
         
         # 3. Preencher data inicial (StartDate) - 30 dias atrás
