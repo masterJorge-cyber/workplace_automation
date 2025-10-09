@@ -546,3 +546,91 @@ class AuthManager:
         else:
             # Se já for apenas o status, retorna direto
             return resultado
+    def reprocessar_notas_selecionadas(self):
+            """Clica em Reprocessar, marca Normal e confirma"""
+            logger.info("🔄 Iniciando reprocessamento das notas selecionadas...")
+            
+            try:
+                # 1. Clicar no botão "Reprocessar"
+                logger.info("1. 📝 Clicando em 'Reprocessar'...")
+                reprocessar_selectors = [
+                    "div.div-action-act.Reprocess",
+                    "div[title*='Reprocessar']",
+                    "div[title*='reprocess']",
+                    "//div[contains(@class, 'Reprocess')]",
+                    "//div[contains(text(), 'Reprocessar')]"
+                ]
+                
+                reprocessado = False
+                for selector in reprocessar_selectors:
+                    if self.wait_and_click(selector, "botão Reprocessar"):
+                        reprocessado = True
+                        logger.info(f"✅ Botão Reprocessar clicado com: {selector}")
+                        break
+                
+                if not reprocessado:
+                    logger.error("❌ Não consegui encontrar botão Reprocessar")
+                    return False
+                
+                # Aguardar dialog abrir
+                time.sleep(3)
+                
+                # 2. Marcar radio button "Normal" (já vem checked, mas vamos garantir)
+                logger.info("2. 🔘 Marcando opção 'Normal'...")
+                normal_selectors = [
+                    "input#EmissionType[value='0']",
+                    "input[name='EmissionType'][value='0']",
+                    "input[type='radio'][value='0']"
+                ]
+                
+                normal_marcado = False
+                for selector in normal_selectors:
+                    try:
+                        self.page.wait_for_selector(selector, timeout=5000)
+                        # Só clica se não estiver checked
+                        is_checked = self.page.is_checked(selector)
+                        if not is_checked:
+                            self.page.click(selector)
+                            logger.info(f"✅ Radio 'Normal' marcado com: {selector}")
+                        else:
+                            logger.info("✅ Radio 'Normal' já estava marcado")
+                        normal_marcado = True
+                        break
+                    except:
+                        continue
+                
+                if not normal_marcado:
+                    logger.warning("⚠️  Não consegui encontrar/marcar radio 'Normal'")
+                
+                time.sleep(1)
+                
+                # 3. Clicar em "OK"
+                logger.info("3. ✅ Clicando em 'OK'...")
+                ok_selectors = [
+                    "span.ui-button-text:has-text('OK')",
+                    "button:has-text('OK')",
+                    "input[value='OK']",
+                    "//span[contains(text(), 'OK')]",
+                    "//button[contains(text(), 'OK')]"
+                ]
+                
+                ok_clicado = False
+                for selector in ok_selectors:
+                    if self.wait_and_click(selector, "botão OK"):
+                        ok_clicado = True
+                        logger.info(f"✅ Botão OK clicado com: {selector}")
+                        break
+                
+                if not ok_clicado:
+                    logger.error("❌ Não consegui encontrar botão OK")
+                    return False
+                
+                # Aguardar processamento
+                time.sleep(5)
+                self.page.wait_for_load_state("networkidle")
+                logger.info("✅ Reprocessamento concluído com sucesso!")
+                return True
+                
+            except Exception as e:
+                logger.error(f"❌ Erro durante reprocessamento: {e}")
+                return False
