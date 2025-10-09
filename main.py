@@ -28,12 +28,14 @@ try:
     from config.settings import AppConfig
     from auth.authentication import AuthManager
     from scrapers.data_scraper import DataScraper
+    from scrapers.sefaz_scraper import SefazScraper
     from models.entities import ScrapingResult, Invoice, BatchScrapingResult
     from utils.helpers import get_date_30_days_ago, validate_credentials
     print("✅ Todos os módulos importados!")
 except ImportError as e:
     print(f"❌ Erro ao importar módulos: {e}")
     sys.exit(1)
+
 class NFScraperApp:
     def __init__(self, config: AppConfig):
         self.config = config
@@ -60,6 +62,81 @@ class NFScraperApp:
         self.auth_manager = AuthManager(self.page)
         
         print("✅ Navegador configurado!")
+    
+    def setup_browser_edge_aprimorado(self):
+        """Configuração aprimorada para Edge com melhor compatibilidade"""
+        print("🦊 Iniciando Edge aprimorado para Sefaz...")
+        
+        playwright = sync_playwright().start()
+        
+        try:
+            self.browser = playwright.chromium.launch(
+                channel="chromium",
+                headless=self.config.headless,
+                slow_mo=1000,  # ⏳ Adiciona delay entre ações (ajuda com captcha)
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-blink-features=AutomationControlled',
+                    '--disable-features=VizDisplayCompositor',
+                    '--disable-background-timer-throttling',
+                    '--disable-renderer-backgrounding',
+                    '--disable-dev-shm-usage',
+                    '--no-first-run',
+                    '--no-default-browser-check',
+                    '--disable-default-apps',
+                    '--disable-popup-blocking',
+                    '--disable-translate',
+                    '--disable-extensions'
+                ]
+            )
+            print("✅ Edge aprimorado configurado!")
+            
+        except Exception as e:
+            print(f"⚠️  Erro ao configurar Edge aprimorado: {e}")
+            print("🔄 Tentando configuração básica do Edge...")
+            self.browser = playwright.chromium.launch(channel="msedge", headless=self.config.headless)
+        
+        # Contexto com configurações realistas
+        context = self.browser.new_context(
+            viewport={'width': 1280, 'height': 720},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+            locale='pt-BR',
+            timezone_id='America/Sao_Paulo'
+        )
+        
+        self.page = context.new_page()
+        
+        # Esconder automação
+        self.page.add_init_script("""
+            // Esconde webdriver
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            
+            // Remove propriedades de automação
+            delete navigator.__proto__.webdriver;
+            
+            // Simula plugins realistas
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [
+                    {0: {type: "application/pdf", suffixes: "pdf", description: "Portable Document Format"}},
+                    {0: {type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Chrome PDF Viewer"}}
+                ],
+            });
+            
+            // Simula linguagens
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['pt-BR', 'pt', 'en-US', 'en'],
+            });
+            
+            // Simula hardware
+            Object.defineProperty(navigator, 'hardwareConcurrency', {
+                get: () => 8,
+            });
+            
+            console.log('🔧 Navegador configurado para Sefaz');
+        """)
+        
+        print("✅ Edge aprimorado pronto para Sefaz!")
     
     def navigate_to_initial_page(self):
         """Navega para a página inicial"""
@@ -105,6 +182,7 @@ class NFScraperApp:
         self.auth_manager.navigate_to_search_screen()
         
         print("✅ Autenticação completa com página extra!")
+    
     def search_single_invoice(self, nota_fiscal: str):
         """Pesquisa uma única nota fiscal e retorna todos os dados"""
         print(f"🔍 Pesquisando nota: {nota_fiscal}")
@@ -126,7 +204,6 @@ class NFScraperApp:
             
             # DEBUG: Mostra o que está retornando
             print(f"   🔍 DEBUG - Tipo retornado: {type(dados_completos)}")
-            print(f"   🔍 DEBUG - Conteúdo: {dados_completos}")
             
             # Extrai status e dados da estrutura correta
             if isinstance(dados_completos, dict):
@@ -154,8 +231,8 @@ class NFScraperApp:
                 "nota_fiscal": nota_fiscal,
                 "status": error_msg,
                 "dados_completos": {}
-            }    
-
+            }
+    
     def search_multiple_invoices(self):
         """Pesquisa múltiplas notas fiscais e retorna status"""
         resultados = []
@@ -250,7 +327,7 @@ class NFScraperApp:
                     info_extra += f" | Valor: {dados['valor_total']}"
             
             print(f"{status_icon} {resultado['nota_fiscal']}: {status}{info_extra}")
-
+    
     def save_results_to_file(self, batch_result, filename=None):
         """Salva os resultados completos em um arquivo CSV na pasta /sheets"""
         import pandas as pd
@@ -280,7 +357,8 @@ class NFScraperApp:
                 'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
             }
             
-            # Adiciona todos os dados completos da linha (se existirem)
+            # Adiciona todos os dados completos da linha
+            #  (se existirem)
             dados_completos = resultado.get('dados_completos', {})
             if dados_completos and isinstance(dados_completos, dict):
                 for chave, valor in dados_completos.items():
@@ -305,130 +383,89 @@ class NFScraperApp:
         else:
             print("📝 Nenhum dado para salvar.")
             return None
-            
-    def run(self):
-        """Executa o fluxo completo do scraper"""
-        try:
-            print("🚀 Iniciando NF Scraper...")
-            self.setup_browser()
-            self.navigate_to_initial_page()
-            self.perform_full_login()
-            
-            # Processa as notas
-            batch_result = self.search_multiple_invoices()
-            
-            # Gera relatório
-            self.display_batch_results(batch_result)
-            
-            # Salva em arquivo
-            arquivo_salvo = self.save_results_to_file(batch_result)
-            
-            print(f"\n✅ Processo concluído com sucesso!")
-            if arquivo_salvo:
-                print(f"💾 Arquivo salvo: {arquivo_salvo}")
-            
-        except Exception as e:
-            print(f"❌ Erro durante a execução: {e}")
-            raise
-        finally:
-            input("\n⏎ Pressione Enter para finalizar...")
-            self.close()
     
-    def close(self):
-        """Fecha recursos"""
-        if self.browser:
-            self.browser.close()
-            print("🔚 Navegador fechado.")
-   
-def display_batch_results(self, batch_result):
-    """Exibe resultados do processamento em lote"""
-    print("\n" + "="*60)
-    print("📋 RELATÓRIO FINAL DO PROCESSAMENTO")
-    print("="*60)
-    
-    print(f"✅ Notas processadas com sucesso: {batch_result['total_notas_processadas']}")
-    print(f"❌ Notas com erro: {len(batch_result['notas_com_erro'])}")
-    print(f"📊 Total de registros encontrados: {batch_result['total_registros_encontrados']}")
-    print(f"🚫 Notas com rejeições: {batch_result['total_notas_rejeitadas']}")
-    
-    if batch_result['notas_com_erro']:
-        print(f"\n🔴 Notas com erro:")
-        for erro in batch_result['notas_com_erro']:
-            print(f"   - {erro['nota_fiscal']}: {erro['erro']}")
-    
-    # Detalhamento
-    print("\n" + "-"*50)
-    print("DETALHAMENTO POR NOTA FISCAL:")
-    print("-"*50)
-    
-    for resultado in batch_result['resultados']:
-        status = resultado['status']
-        if '❌' in status or 'Erro' in status:
-            status_icon = "❌"
-        elif 'Rejeitado' in status:
-            status_icon = "🚫"
-        elif 'não encontrado' in status.lower() or 'filtro não achou' in status.lower():
-            status_icon = "🔍"
-        else:
-            status_icon = "✅"
-        
-        print(f"{status_icon} {resultado['nota_fiscal']}: {status}")
-    def save_results_to_file(self, batch_result, filename=None):
-        """Salva os resultados em um arquivo CSV"""
-        import pandas as pd
+    def salvar_json_sefaz(self, resultados):
+        """Salva resultados da Sefaz em JSON"""
+        import json
         from datetime import datetime
+        import os
         
-        if not filename:
-            filename = f"/sheets/resultados_notas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        sheets_dir = "sheets"
+        if not os.path.exists(sheets_dir):
+            os.makedirs(sheets_dir)
         
-        # Prepara dados para CSV
-        dados = []
-        for resultado in batch_result['resultados']:
-            dados.append({
-                'nota_fiscal': resultado['nota_fiscal'],
-                'status': resultado['status'],
-                'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-            })
+        filename = f"protocolos_sefaz_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        filepath = os.path.join(sheets_dir, filename)
         
-        for erro in batch_result['notas_com_erro']:
-            dados.append({
-                'nota_fiscal': erro['nota_fiscal'],
-                'status': f"ERRO: {erro['erro']}",
-                'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-            })
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(resultados, f, ensure_ascii=False, indent=2)
         
-        if dados:
-            df = pd.DataFrame(dados)
-            df.to_csv(filename, index=False, encoding='utf-8-sig')
-            print(f"💾 Resultados salvos em: {filename}")
-            return filename
+        print(f"💾 JSON salvo em: {filepath}")
+        
+        # Mostrar resumo
+        print(f"\n📊 Resumo Sefaz:")
+        for resultado in resultados:
+            status = "✅" if resultado.get('consulta_realizada', False) else "❌"
+            print(f"   {status} {resultado['nota']}: {resultado['protocolo']}")
+    
+    def executar_fluxo_unisys(self):
+        """Fluxo 1: Unisys (atual)"""
+        print("🚀 Iniciando Fluxo 1 - Unisys...")
+        self.setup_browser()
+        self.navigate_to_initial_page()
+        self.perform_full_login()
+        
+        batch_result = self.search_multiple_invoices()
+        
+        print("\n🔄 Iniciando reprocessamento das notas rejeitadas...")
+        success = self.auth_manager.reprocessar_notas_selecionadas()
+        if success:
+            print("✅ Notas reprocessadas com sucesso!")
         else:
-            print("📝 Nenhum dado para salvar.")
-            return None
-         
-    def run(self):
-        """Executa o fluxo completo do scraper"""
-        try:
-            print("🚀 Iniciando NF Scraper...")
-            self.setup_browser()
-            self.navigate_to_initial_page()
-            self.perform_full_login()  # ← CORRIGIDO: nome completo do método
-            
-            # Processa as notas
-            batch_result = self.search_multiple_invoices()
-            
-            # Gera relatório
-            self.display_batch_results(batch_result)
-
-                    # Salva em arquivo
-            arquivo_salvo = self.save_results_to_file(batch_result)
+            print("❌ Falha no reprocessamento - continuando...")
         
-            print(f"\n✅ Processo concluído com sucesso!")
-            if arquivo_salvo:
-                print(f"💾 Arquivo salvo: {arquivo_salvo}")
+        self.display_batch_results(batch_result)
+        arquivo_salvo = self.save_results_to_file(batch_result)
+        
+        print(f"\n✅ Processo Unisys concluído com sucesso!")
+        if arquivo_salvo:
+            print(f"💾 Arquivo salvo: {arquivo_salvo}")
+    
+    def executar_fluxo_sefaz(self):
+        """Fluxo 2: Sefaz (novo) - AGORA COM EDGE"""
+        print("🚀 Iniciando Fluxo 2 - Sefaz com Edge...")
+        
+        # 🦊 Usar Edge aprimorado para Sefaz
+        self.setup_browser_edge_aprimorado()
+        
+        # ✅ CORREÇÃO: Criar SefazScraper sem o parâmetro usar_edge
+        sefaz_scraper = SefazScraper(self.page)  # ← Removido usar_edge=True
+        
+        resultados = []
+        for i, nota in enumerate(self.config.notas_fiscais, 1):
+            print(f"\n[{i}/{len(self.config.notas_fiscais)}] Consultando: {nota}")
+            resultado = sefaz_scraper.consultar_nota_sefaz(nota)
+            resultados.append(resultado)
             
-                print("\n✅ Processo concluído com sucesso!")
+            if i < len(self.config.notas_fiscais):
+                time.sleep(3)  # ⏳ Pausa maior entre consultas Sefaz
+        
+        # Salvar JSON
+        self.salvar_json_sefaz(resultados)
+        print(f"\n✅ Processo Sefaz concluído com sucesso!")
+    
+    def run(self):
+        """Executa o fluxo completo baseado no FLUXO configurado"""
+        try:
+            print(f"🎯 Fluxo configurado: {self.config.fluxo}")
             
+            if self.config.fluxo == 1:
+                self.executar_fluxo_unisys()
+            elif self.config.fluxo == 2:
+                self.executar_fluxo_sefaz()
+            else:
+                print(f"❌ Fluxo {self.config.fluxo} não reconhecido. Use 1 (Unisys) ou 2 (Sefaz)")
+                
         except Exception as e:
             print(f"❌ Erro durante a execução: {e}")
             raise
@@ -448,21 +485,14 @@ def main():
         config = AppConfig.from_env()
         print("✅ Configurações carregadas!")
         
-        # Validações
-        if not all([
-            config.credentials.email,
-            config.credentials.password,
-            config.credentials.monitor_user,
-            config.credentials.monitor_password
-        ]):
-            print("❌ Credenciais incompletas no arquivo .env")
-            return
-        
+        # Validações básicas
         if not config.notas_fiscais:
             print("❌ Nenhuma nota fiscal configurada")
             return
         
         print(f"📋 Notas a processar: {len(config.notas_fiscais)}")
+        for nf in config.notas_fiscais:
+            print(f"   - {nf}")
         
         # Executa aplicação
         app = NFScraperApp(config)

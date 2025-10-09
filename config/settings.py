@@ -18,21 +18,20 @@ class Credentials:
 class AppConfig:
     proxy: ProxyConfig
     credentials: Credentials
-    notas_fiscais: List[str]  # Agora é uma lista
-    headless: bool = False
-    timeout: int = 30000
+    notas_fiscais: List[str]
+    headless: bool = True
+    timeout: int = 60000
+    slow_mo: int = 100
+    fluxo: int = 1  # ← NOVO: 1 = Unisys, 2 = Sefaz
     
     @classmethod
     def from_env(cls):
-        """Carrega configurações de variáveis de ambiente"""
-        # Carrega a lista de notas fiscais do environment
         notas_env = os.getenv('NOTAS_FISCAIS', '')
         if notas_env:
             notas_fiscais = [nf.strip() for nf in notas_env.split(',')]
         else:
-            # Fallback para uma nota única (compatibilidade)
-            chave_unica = os.getenv('CHAVE_NOT', '33250947508411264641551100000702955335309202')
-            notas_fiscais = [chave_unica]
+            chave_unica = os.getenv('CHAVE_NOT', '')
+            notas_fiscais = [chave_unica] if chave_unica else []
         
         return cls(
             proxy=ProxyConfig(
@@ -46,5 +45,7 @@ class AppConfig:
                 monitor_password=os.getenv('MONITOR_PASSWORD')
             ),
             notas_fiscais=notas_fiscais,
-            headless=os.getenv('HEADLESS', 'false').lower() == 'true'
+            headless=os.getenv('HEADLESS', 'true').lower() == 'true',
+            slow_mo=int(os.getenv('SLOW_MO', '100')),
+            fluxo=int(os.getenv('FLUXO', '1'))  # ← NOVO
         )
