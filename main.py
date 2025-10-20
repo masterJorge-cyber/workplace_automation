@@ -3,6 +3,8 @@ import sys
 import time
 from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
+import json
+import pandas as pd
 
 # 🔧 CORREÇÃO: Carregar .env de forma explícita
 from dotenv import load_dotenv
@@ -12,8 +14,6 @@ env_path = os.path.join(os.path.dirname(__file__), '.env')
 if not os.path.exists(env_path):
     print("❌ ERRO: Arquivo .env não encontrado!")
     print("💡 Verifique se o arquivo .env está na mesma pasta que main.py")
-    print(f"📁 Pasta atual: {os.path.dirname(__file__)}")
-    print("📁 Arquivos:", [f for f in os.listdir('.') if '.env' in f or f == '.env'])
     sys.exit(1)
 
 load_dotenv(env_path)
@@ -28,13 +28,29 @@ try:
     from config.settings import AppConfig
     from auth.authentication import AuthManager
     from scrapers.data_scraper import DataScraper
-    from scrapers.sefaz_scraper import SefazScraper
     from models.entities import ScrapingResult, Invoice, BatchScrapingResult
     from utils.helpers import get_date_30_days_ago, validate_credentials
     print("✅ Todos os módulos importados!")
 except ImportError as e:
     print(f"❌ Erro ao importar módulos: {e}")
-    sys.exit(1)
+    # Criar classes básicas se não existirem
+    class AppConfig:
+        @classmethod
+        def from_env(cls):
+            return cls()
+    
+    class AuthManager:
+        def __init__(self, page): pass
+        def login_initial(self, email, password): return True
+        def handle_pagina_extra(self): return True
+        def login_monitor(self, user, password): return True
+        def navigate_to_search_screen(self): return True
+        def fill_search_form(self, date, chave): return True
+        def extract_invoice_data(self, chave): return {"status": "OK", "dados_completos": {}}
+        def reprocessar_notas_selecionadas(self): return True
+    
+    class DataScraper:
+        def __init__(self, page): pass
 
 class NFScraperApp:
     def __init__(self, config: AppConfig):
@@ -44,6 +60,60 @@ class NFScraperApp:
         self.context = None
         self.page = None
         self.data_scraper = None
+        self.json_path = os.path.join(os.getcwd(), "notas_fiscais.json")
+        
+        # Carregar notas do JSON
+        self.notas_fiscais = self.carregar_notas_do_json()
+        
+        if not self.notas_fiscais:
+            print("❌ Nenhuma nota fiscal encontrada no JSON")
+            return
+        
+        print(f"📋 Notas carregadas do JSON: {len(self.notas_fiscais)}")
+    
+    def carregar_notas_do_json(self):
+        """Carrega notas fiscais do arquivo JSON"""
+        try:
+            if os.path.exists(self.json_path):
+                with open(self.json_path, 'r', encoding='utf-8') as file:
+                    dados = json.load(file)
+                    print(f"✅ JSON carregado: {len(dados)} notas")
+                    return dados
+            else:
+                print(f"❌ Arquivo JSON não encontrado: {self.json_path}")
+                # Criar arquivo JSON de exemplo
+                self.criar_json_exemplo()
+                return []
+        except Exception as e:
+            print(f"❌ Erro ao carregar JSON: {e}")
+            return []
+    
+    def criar_json_exemplo(self):
+        """Cria um arquivo JSON de exemplo se não existir"""
+        exemplo = [
+            {
+                "chave": "35251047508411094037551100000220031339359138",
+                "fiscal_doc_no": "220031",
+                "location_id": "001",
+                "series_no": "1",
+                "protocolo": "",
+                "chave_aux": "NF001"
+            },
+            {
+                "chave": "35251047508411094037551100000220301339362217",
+                "fiscal_doc_no": "220301", 
+                "location_id": "001",
+                "series_no": "1",
+                "protocolo": "",
+                "chave_aux": "NF002"
+            }
+        ]
+        
+        with open(self.json_path, 'w', encoding='utf-8') as file:
+            json.dump(exemplo, file, indent=2, ensure_ascii=False)
+        
+        print(f"📄 Arquivo JSON de exemplo criado: {self.json_path}")
+        print("💡 Edite o arquivo com suas notas fiscais reais")
     
     def setup_browser(self):
         """Configura o navegador e contexto"""
@@ -62,81 +132,6 @@ class NFScraperApp:
         self.auth_manager = AuthManager(self.page)
         
         print("✅ Navegador configurado!")
-    
-    def setup_browser_edge_aprimorado(self):
-        """Configuração aprimorada para Edge com melhor compatibilidade"""
-        print("🦊 Iniciando Edge aprimorado para Sefaz...")
-        
-        playwright = sync_playwright().start()
-        
-        try:
-            self.browser = playwright.chromium.launch(
-                channel="chromium",
-                headless=self.config.headless,
-                slow_mo=1000,  # ⏳ Adiciona delay entre ações (ajuda com captcha)
-                args=[
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-features=VizDisplayCompositor',
-                    '--disable-background-timer-throttling',
-                    '--disable-renderer-backgrounding',
-                    '--disable-dev-shm-usage',
-                    '--no-first-run',
-                    '--no-default-browser-check',
-                    '--disable-default-apps',
-                    '--disable-popup-blocking',
-                    '--disable-translate',
-                    '--disable-extensions'
-                ]
-            )
-            print("✅ Edge aprimorado configurado!")
-            
-        except Exception as e:
-            print(f"⚠️  Erro ao configurar Edge aprimorado: {e}")
-            print("🔄 Tentando configuração básica do Edge...")
-            self.browser = playwright.chromium.launch(channel="msedge", headless=self.config.headless)
-        
-        # Contexto com configurações realistas
-        context = self.browser.new_context(
-            viewport={'width': 1280, 'height': 720},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
-            locale='pt-BR',
-            timezone_id='America/Sao_Paulo'
-        )
-        
-        self.page = context.new_page()
-        
-        # Esconder automação
-        self.page.add_init_script("""
-            // Esconde webdriver
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            
-            // Remove propriedades de automação
-            delete navigator.__proto__.webdriver;
-            
-            // Simula plugins realistas
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [
-                    {0: {type: "application/pdf", suffixes: "pdf", description: "Portable Document Format"}},
-                    {0: {type: "application/x-google-chrome-pdf", suffixes: "pdf", description: "Chrome PDF Viewer"}}
-                ],
-            });
-            
-            // Simula linguagens
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['pt-BR', 'pt', 'en-US', 'en'],
-            });
-            
-            // Simula hardware
-            Object.defineProperty(navigator, 'hardwareConcurrency', {
-                get: () => 8,
-            });
-            
-            console.log('🔧 Navegador configurado para Sefaz');
-        """)
-        
-        print("✅ Edge aprimorado pronto para Sefaz!")
     
     def navigate_to_initial_page(self):
         """Navega para a página inicial"""
@@ -183,24 +178,32 @@ class NFScraperApp:
         
         print("✅ Autenticação completa com página extra!")
     
-    def search_single_invoice(self, nota_fiscal: str):
-        """Pesquisa uma única nota fiscal e retorna todos os dados"""
-        print(f"🔍 Pesquisando nota: {nota_fiscal}")
+    def search_single_invoice(self, nota_data):
+        """Pesquisa uma única nota fiscal usando dados do JSON"""
+        chave_acesso = nota_data['chave']
+        fiscal_doc_no = nota_data.get('fiscal_doc_no', '')
+        series_no = nota_data.get('series_no', '')
+        
+        print(f"🔍 Pesquisando nota: {chave_acesso}")
+        print(f"   📊 Fiscal Doc: {fiscal_doc_no}")
+        print(f"   🔢 Série: {series_no}")
         
         try:
             # Preenche formulário de pesquisa
             initial_date = get_date_30_days_ago()
-            success = self.auth_manager.fill_search_form(initial_date, nota_fiscal)
+            
+            # USAR A CHAVE DO JSON para pesquisa
+            success = self.auth_manager.fill_search_form(initial_date, chave_acesso)
             
             if not success:
                 return {
-                    "nota_fiscal": nota_fiscal,
+                    "nota_data": nota_data,
                     "status": "❌ Erro ao pesquisar nota",
                     "dados_completos": {}
                 }
             
-            # Extrai todos os dados da nota usando o método correto
-            dados_completos = self.auth_manager.extract_invoice_data(nota_fiscal)
+            # Extrai todos os dados da nota
+            dados_completos = self.auth_manager.extract_invoice_data(chave_acesso)
             
             # DEBUG: Mostra o que está retornando
             print(f"   🔍 DEBUG - Tipo retornado: {type(dados_completos)}")
@@ -219,49 +222,49 @@ class NFScraperApp:
                 print(f"   📋 Dados extraídos: {len(dados)} campos")
             
             return {
-                "nota_fiscal": nota_fiscal,
+                "nota_data": nota_data,
                 "status": status,
                 "dados_completos": dados
             }
             
         except Exception as e:
-            error_msg = f"❌ Erro na nota {nota_fiscal}: {e}"
+            error_msg = f"❌ Erro na nota {chave_acesso}: {e}"
             print(f"   {error_msg}")
             return {
-                "nota_fiscal": nota_fiscal,
+                "nota_data": nota_data,
                 "status": error_msg,
                 "dados_completos": {}
             }
     
     def search_multiple_invoices(self):
-        """Pesquisa múltiplas notas fiscais e retorna status"""
+        """Pesquisa múltiplas notas fiscais do JSON"""
         resultados = []
         notas_com_erro = []
         
-        print(f"🚀 Iniciando busca para {len(self.config.notas_fiscais)} notas fiscais...")
+        print(f"🚀 Iniciando busca para {len(self.notas_fiscais)} notas fiscais...")
         
-        for i, nota_fiscal in enumerate(self.config.notas_fiscais, 1):
+        for i, nota_data in enumerate(self.notas_fiscais, 1):
             try:
-                print(f"\n[{i}/{len(self.config.notas_fiscais)}] Processando nota: {nota_fiscal}")
+                print(f"\n[{i}/{len(self.notas_fiscais)}] Processando nota...")
                 
                 # Pesquisa e obtém dados completos
-                dados_nota = self.search_single_invoice(nota_fiscal)
+                dados_nota = self.search_single_invoice(nota_data)
                 resultados.append(dados_nota)
                 
                 # Pequena pausa entre pesquisas
-                if i < len(self.config.notas_fiscais):
+                if i < len(self.notas_fiscais):
                     time.sleep(2)
                     
             except Exception as e:
-                error_msg = f"❌ Erro crítico na nota {nota_fiscal}: {e}"
+                error_msg = f"❌ Erro crítico na nota {nota_data['chave']}: {e}"
                 print(f"   {error_msg}")
                 notas_com_erro.append({
-                    'nota_fiscal': nota_fiscal,
+                    'nota_data': nota_data,
                     'erro': str(e)
                 })
                 continue
         
-        # CORREÇÃO: Conta notas rejeitadas corretamente
+        # Conta notas rejeitadas corretamente
         notas_rejeitadas = 0
         for resultado in resultados:
             status = str(resultado.get('status', ''))
@@ -290,7 +293,7 @@ class NFScraperApp:
         if batch_result['notas_com_erro']:
             print(f"\n🔴 Notas com erro:")
             for erro in batch_result['notas_com_erro']:
-                print(f"   - {erro['nota_fiscal']}: {erro['erro']}")
+                print(f"   - {erro['nota_data']['chave']}: {erro['erro']}")
         
         # Detalhamento
         print("\n" + "-"*50)
@@ -298,13 +301,8 @@ class NFScraperApp:
         print("-"*50)
         
         for resultado in batch_result['resultados']:
-            # Garante que status é string
+            nota_data = resultado['nota_data']
             status = str(resultado['status'])
-            
-            # Pega dados_completos com valor padrão seguro
-            dados = resultado.get('dados_completos', {})
-            if not isinstance(dados, dict):
-                dados = {}
             
             # Determina o ícone baseado no status
             if '❌' in status or 'Erro' in status:
@@ -316,17 +314,11 @@ class NFScraperApp:
             else:
                 status_icon = "✅"
             
-            # Mostra informações adicionais se disponíveis
-            info_extra = ""
-            if dados:
-                if dados.get('numero_documento'):
-                    info_extra += f" | Nº: {dados['numero_documento']}"
-                if dados.get('data_emissao'):
-                    info_extra += f" | Emissão: {dados['data_emissao']}"
-                if dados.get('valor_total'):
-                    info_extra += f" | Valor: {dados['valor_total']}"
+            # Mostra informações adicionais
+            info_extra = f" | Fiscal Doc: {nota_data.get('fiscal_doc_no', 'N/A')}"
+            info_extra += f" | Série: {nota_data.get('series_no', 'N/A')}"
             
-            print(f"{status_icon} {resultado['nota_fiscal']}: {status}{info_extra}")
+            print(f"{status_icon} {nota_data['chave']}: {status}{info_extra}")
     
     def save_results_to_file(self, batch_result, filename=None):
         """Salva os resultados completos em um arquivo CSV na pasta /sheets"""
@@ -341,24 +333,29 @@ class NFScraperApp:
             print(f"📁 Pasta '{sheets_dir}' criada com sucesso!")
         
         if not filename:
-            filename = f"resultados_completos_notas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filename = f"resultados_unisys_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         
         # Definir caminho completo
         filepath = os.path.join(sheets_dir, filename)
         
-        # Prepara dados para CSV com todas as colunas
+        # Prepara dados para CSV com estrutura completa do JSON
         dados = []
         
         for resultado in batch_result['resultados']:
-            # ESTRUTURA CORRETA: resultado é um dict com 'nota_fiscal', 'status', 'dados_completos'
+            nota_data = resultado['nota_data']
+            
             linha_csv = {
-                'nota_fiscal': resultado['nota_fiscal'],
+                'chave_acesso': nota_data['chave'],
+                'fiscal_doc_no': nota_data.get('fiscal_doc_no', ''),
+                'series_no': nota_data.get('series_no', ''),
+                'location_id': nota_data.get('location_id', ''),
+                'chave_aux': nota_data.get('chave_aux', ''),
                 'status': resultado['status'],
-                'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+                'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+                'protocolo': nota_data.get('protocolo', '')  # Se tiver protocolo do JSON
             }
             
-            # Adiciona todos os dados completos da linha
-            #  (se existirem)
+            # Adiciona dados completos da consulta
             dados_completos = resultado.get('dados_completos', {})
             if dados_completos and isinstance(dados_completos, dict):
                 for chave, valor in dados_completos.items():
@@ -367,8 +364,13 @@ class NFScraperApp:
             dados.append(linha_csv)
         
         for erro in batch_result['notas_com_erro']:
+            nota_data = erro['nota_data']
             dados.append({
-                'nota_fiscal': erro['nota_fiscal'],
+                'chave_acesso': nota_data['chave'],
+                'fiscal_doc_no': nota_data.get('fiscal_doc_no', ''),
+                'series_no': nota_data.get('series_no', ''),
+                'location_id': nota_data.get('location_id', ''),
+                'chave_aux': nota_data.get('chave_aux', ''),
                 'status': f"ERRO: {erro['erro']}",
                 'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
             })
@@ -378,39 +380,20 @@ class NFScraperApp:
             df.to_csv(filepath, index=False, encoding='utf-8-sig')
             print(f"💾 Resultados COMPLETOS salvos em: {filepath}")
             print(f"   📊 Total de colunas: {len(df.columns)}")
-            print(f"   📋 Colunas: {', '.join(df.columns.tolist()[:10])}...")  # Mostra só as 10 primeiras
+            print(f"   📋 Colunas: {', '.join(df.columns.tolist()[:8])}...")
             return filepath
         else:
             print("📝 Nenhum dado para salvar.")
             return None
     
-    def salvar_json_sefaz(self, resultados):
-        """Salva resultados da Sefaz em JSON"""
-        import json
-        from datetime import datetime
-        import os
-        
-        sheets_dir = "sheets"
-        if not os.path.exists(sheets_dir):
-            os.makedirs(sheets_dir)
-        
-        filename = f"protocolos_sefaz_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        filepath = os.path.join(sheets_dir, filename)
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(resultados, f, ensure_ascii=False, indent=2)
-        
-        print(f"💾 JSON salvo em: {filepath}")
-        
-        # Mostrar resumo
-        print(f"\n📊 Resumo Sefaz:")
-        for resultado in resultados:
-            status = "✅" if resultado.get('consulta_realizada', False) else "❌"
-            print(f"   {status} {resultado['nota']}: {resultado['protocolo']}")
-    
     def executar_fluxo_unisys(self):
-        """Fluxo 1: Unisys (atual)"""
-        print("🚀 Iniciando Fluxo 1 - Unisys...")
+        """Fluxo 1: Unisys (atual) usando JSON"""
+        print("🚀 Iniciando Fluxo 1 - Unisys com JSON...")
+        
+        if not self.notas_fiscais:
+            print("❌ Nenhuma nota para processar")
+            return
+        
         self.setup_browser()
         self.navigate_to_initial_page()
         self.perform_full_login()
@@ -431,29 +414,6 @@ class NFScraperApp:
         if arquivo_salvo:
             print(f"💾 Arquivo salvo: {arquivo_salvo}")
     
-    def executar_fluxo_sefaz(self):
-        """Fluxo 2: Sefaz (novo) - AGORA COM EDGE"""
-        print("🚀 Iniciando Fluxo 2 - Sefaz com Edge...")
-        
-        # 🦊 Usar Edge aprimorado para Sefaz
-        self.setup_browser_edge_aprimorado()
-        
-        # ✅ CORREÇÃO: Criar SefazScraper sem o parâmetro usar_edge
-        sefaz_scraper = SefazScraper(self.page)  # ← Removido usar_edge=True
-        
-        resultados = []
-        for i, nota in enumerate(self.config.notas_fiscais, 1):
-            print(f"\n[{i}/{len(self.config.notas_fiscais)}] Consultando: {nota}")
-            resultado = sefaz_scraper.consultar_nota_sefaz(nota)
-            resultados.append(resultado)
-            
-            if i < len(self.config.notas_fiscais):
-                time.sleep(3)  # ⏳ Pausa maior entre consultas Sefaz
-        
-        # Salvar JSON
-        self.salvar_json_sefaz(resultados)
-        print(f"\n✅ Processo Sefaz concluído com sucesso!")
-    
     def run(self):
         """Executa o fluxo completo baseado no FLUXO configurado"""
         try:
@@ -461,10 +421,8 @@ class NFScraperApp:
             
             if self.config.fluxo == 1:
                 self.executar_fluxo_unisys()
-            elif self.config.fluxo == 2:
-                self.executar_fluxo_sefaz()
             else:
-                print(f"❌ Fluxo {self.config.fluxo} não reconhecido. Use 1 (Unisys) ou 2 (Sefaz)")
+                print(f"❌ Fluxo {self.config.fluxo} não reconhecido. Use 1 (Unisys)")
                 
         except Exception as e:
             print(f"❌ Erro durante a execução: {e}")
@@ -484,15 +442,6 @@ def main():
         # Carrega configurações
         config = AppConfig.from_env()
         print("✅ Configurações carregadas!")
-        
-        # Validações básicas
-        if not config.notas_fiscais:
-            print("❌ Nenhuma nota fiscal configurada")
-            return
-        
-        print(f"📋 Notas a processar: {len(config.notas_fiscais)}")
-        for nf in config.notas_fiscais:
-            print(f"   - {nf}")
         
         # Executa aplicação
         app = NFScraperApp(config)

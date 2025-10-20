@@ -9,7 +9,7 @@ class Invoice:
     
     @property
     def is_rejected(self) -> bool:
-        return "Rejeitado" in self.data.get('col_7', '')
+            return "Rejeitado" in self.data.get('col_7', '')
     
     @property
     def is_pending(self) -> bool:
