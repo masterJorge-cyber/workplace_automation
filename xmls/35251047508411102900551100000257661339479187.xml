@@ -2,77 +2,77 @@
 <nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
   <protNFe>
     <infProt>
-      <nProt>135252999690192</nProt>
-      <digVal>fICDijYSelppm//QoaXMxXWGl0Q=</digVal>
-      <dhRecbto>2025-10-09T00:49:09-03:00</dhRecbto>
-      <Id>Id135252999690192</Id>
-      <chNFe>35251047508411094037551100000220301339362217</chNFe>
+      <nProt>135253000009587</nProt>
+      <digVal>vGAozqEjAUzwcFrLkdzheTBjdeA=</digVal>
+      <dhRecbto>2025-10-09T01:26:44-03:00</dhRecbto>
+      <Id>Id135253000009587</Id>
+      <chNFe>35251047508411102900551100000257661339479187</chNFe>
       <xMotivo>Autorizado o uso da NF-e</xMotivo>
       <cStat>100</cStat>
     </infProt>
   </protNFe>
   <NFe>
-    <infNFe Id="NFe35251047508411094037551100000220301339362217">
+    <infNFe Id="NFe35251047508411102900551100000257661339479187">
       <ide>
         <tpNF>0</tpNF>
         <mod>55</mod>
         <indPres>9</indPres>
         <tpImp>1</tpImp>
-        <nNF>22030</nNF>
+        <nNF>25766</nNF>
         <cMunFG>3537602</cMunFG>
         <procEmi>0</procEmi>
         <finNFe>1</finNFe>
-        <dhEmi>2025-10-09T00:48:55-03:00</dhEmi>
+        <dhEmi>2025-10-09T01:26:31-03:00</dhEmi>
         <tpAmb>1</tpAmb>
         <indFinal>0</indFinal>
-        <dhSaiEnt>2025-10-09T00:48:55-03:00</dhSaiEnt>
+        <dhSaiEnt>2025-10-09T01:26:32-03:00</dhSaiEnt>
         <idDest>1</idDest>
         <tpEmis>1</tpEmis>
         <cDV>7</cDV>
         <cUF>35</cUF>
         <serie>110</serie>
         <natOp>Ajuste Positivo de Estoque</natOp>
-        <cNF>33936221</cNF>
+        <cNF>33947918</cNF>
         <verProc>NDDigital NFe 4.8.5</verProc>
         <indIntermed>0</indIntermed>
       </ide>
       <emit>
         <xNome>CIA BRASILEIRA DE DISTRIBUICAO</xNome>
         <CRT>3</CRT>
-        <xFant>EX PERUIBE RIBAMAR</xFant>
-        <CNPJ>47508411094037</CNPJ>
+        <xFant>EX PERUIBE P. ANCH</xFant>
+        <CNPJ>47508411102900</CNPJ>
         <enderEmit>
-          <xCpl>JARDIM RIBAMAR</xCpl>
+          <xCpl>CENTRO</xCpl>
           <fone>0011040040010</fone>
           <UF>SP</UF>
           <xPais>BRASIL</xPais>
           <cPais>1058</cPais>
-          <xLgr>AVENIDA PADRE ANCHIETA, 2573</xLgr>
+          <xLgr>AV. PADRE ANCHIETA, 1340</xLgr>
           <xMun>Peruibe</xMun>
-          <nro>2573</nro>
+          <nro>1340</nro>
           <cMun>3537602</cMun>
-          <xBairro>JARDIM RIBAMAR</xBairro>
+          <xBairro>CENTRO</xBairro>
           <CEP>11750000</CEP>
         </enderEmit>
-        <IE>524028489115</IE>
+        <IE>524008335118</IE>
       </emit>
       <dest>
         <xNome>CIA BRASILEIRA DE DISTRIBUICAO</xNome>
-        <CNPJ>47508411094037</CNPJ>
+        <CNPJ>47508411102900</CNPJ>
         <enderDest>
-          <xCpl>JARDIM RIBAMAR</xCpl>
+          <xCpl>CENTRO</xCpl>
           <fone>0011040040010</fone>
           <UF>SP</UF>
           <xPais>Brazil</xPais>
           <cPais>1058</cPais>
-          <xLgr>AVENIDA PADRE ANCHIETA, 2573</xLgr>
+          <xLgr>AV. PADRE ANCHIETA, 1340</xLgr>
           <xMun>Peruibe</xMun>
-          <nro>2573</nro>
+          <nro>1340</nro>
           <cMun>3537602</cMun>
-          <xBairro>JARDIM RIBAMAR</xBairro>
+          <xBairro>CENTRO</xBairro>
           <CEP>11750000</CEP>
         </enderDest>
-        <IE>524028489115</IE>
+        <IE>524008335118</IE>
         <indIEDest>1</indIEDest>
       </dest>
       <det>
@@ -83,11 +83,11 @@
           <indEscala>S</indEscala>
           <qCom>1.0000</qCom>
           <cEANTrib>7896005801529</cEANTrib>
-          <vUnTrib>28.9743000000</vUnTrib>
+          <vUnTrib>26.1767000000</vUnTrib>
           <qTrib>1.0000</qTrib>
-          <vProd>28.97</vProd>
+          <vProd>26.18</vProd>
           <xProd>CAFE TM 3 CORACOES EX FORTE 500 GR</xProd>
-          <vUnCom>28.9743000000</vUnCom>
+          <vUnCom>26.1767000000</vUnCom>
           <indTot>1</indTot>
           <uTrib>EA</uTrib>
           <NCM>09012100</NCM>
@@ -133,11 +133,11 @@
           <vBCST>0.00</vBCST>
           <qBCMonoRet>0.00</qBCMonoRet>
           <vICMSDeson>0.00</vICMSDeson>
-          <vProd>28.97</vProd>
+          <vProd>85.86</vProd>
           <vSeg>0.00</vSeg>
           <vFCP>0.00</vFCP>
           <vFCPST>0.00</vFCPST>
-          <vNF>28.97</vNF>
+          <vNF>85.86</vNF>
           <vTotTrib>0.00</vTotTrib>
           <vPIS>0.00</vPIS>
           <vIPIDevol>0.00</vIPIDevol>
@@ -156,10 +156,10 @@
       <transp>
         <modFrete>9</modFrete>
         <vol>
-          <pesoL>0.000</pesoL>
+          <pesoL>2.610</pesoL>
           <esp>UN</esp>
-          <qVol>1</qVol>
-          <pesoB>0.000</pesoB>
+          <qVol>12</qVol>
+          <pesoB>2.610</pesoB>
         </vol>
       </transp>
       <pag>
@@ -169,7 +169,7 @@
         </detPag>
       </pag>
       <infAdic>
-        <infAdFisco>Red BC ICMS conf. Anexo II, Art. 3,</infAdFisco>
+        <infAdFisco>ALIQ DIF ICMS conf Decreto nº 66.376/2021 ; Red BC ICMS conf. Anexo II, Art. 3,</infAdFisco>
       </infAdic>
       <infRespTec>
         <fone>551146806186</fone>

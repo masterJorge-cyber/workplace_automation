@@ -39,16 +39,6 @@ except ImportError as e:
         def from_env(cls):
             return cls()
     
-    class AuthManager:
-        def __init__(self, page): pass
-        def login_initial(self, email, password): return True
-        def handle_pagina_extra(self): return True
-        def login_monitor(self, user, password): return True
-        def navigate_to_search_screen(self): return True
-        def fill_search_form(self, date, chave): return True
-        def extract_invoice_data(self, chave): return {"status": "OK", "dados_completos": {}}
-        def reprocessar_notas_selecionadas(self): return True
-    
     class DataScraper:
         def __init__(self, page): pass
 
@@ -205,9 +195,6 @@ class NFScraperApp:
             # Extrai todos os dados da nota
             dados_completos = self.auth_manager.extract_invoice_data(chave_acesso)
             
-            # DEBUG: Mostra o que está retornando
-            print(f"   🔍 DEBUG - Tipo retornado: {type(dados_completos)}")
-            
             # Extrai status e dados da estrutura correta
             if isinstance(dados_completos, dict):
                 status = dados_completos.get('status', 'Status não encontrado')
@@ -218,8 +205,6 @@ class NFScraperApp:
                 dados = {}
             
             print(f"   📊 Status: {status}")
-            if dados:
-                print(f"   📋 Dados extraídos: {len(dados)} campos")
             
             return {
                 "nota_data": nota_data,
@@ -264,22 +249,80 @@ class NFScraperApp:
                 })
                 continue
         
-        # Conta notas rejeitadas corretamente
-        notas_rejeitadas = 0
-        for resultado in resultados:
-            status = str(resultado.get('status', ''))
-            if 'Rejeitado' in status:
-                notas_rejeitadas += 1
-        
         return {
             'resultados': resultados,
             'notas_com_erro': notas_com_erro,
             'total_notas_processadas': len(resultados),
-            'total_registros_encontrados': len(resultados),
-            'total_notas_rejeitadas': notas_rejeitadas
+            'total_registros_encontrados': len(resultados)
         }
     
-    def display_batch_results(self, batch_result):
+    def reprocessar_notas_individualmente(self, notas_rejeitadas):
+        """Reprocessa CADA nota rejeitada individualmente"""
+        if not notas_rejeitadas:
+            print("📝 Nenhuma nota rejeitada para reprocessar")
+            return True
+        
+        print(f"🔄 INICIANDO REPROCESSAMENTO INDIVIDUAL DE {len(notas_rejeitadas)} NOTAS")
+        print("=" * 60)
+        
+        sucessos = 0
+        for i, nota_data in enumerate(notas_rejeitadas, 1):
+            try:
+                chave = nota_data['chave']
+                print(f"\n[{i}/{len(notas_rejeitadas)}] Reprocessando: {chave}")
+                
+                # 1. Navegar de volta para tela de pesquisa
+                self.auth_manager.navigate_to_search_screen()
+                time.sleep(2)
+                
+                # 2. Pesquisar a nota específica novamente
+                initial_date = get_date_30_days_ago()
+                success = self.auth_manager.fill_search_form(initial_date, chave)
+                
+                if not success:
+                    print(f"   ❌ Falha ao pesquisar nota: {chave}")
+                    continue
+                
+                # 3. Aguardar resultado da pesquisa
+                print("   ⏳ Aguardando resultado da pesquisa...")
+                time.sleep(5)
+                self.page.wait_for_load_state("networkidle")
+                
+                # 4. Extrair dados para encontrar a linha da nota
+                resultado = self.auth_manager.extract_invoice_data(chave)
+                
+                if not resultado or 'Não tem nota' in str(resultado.get('status')):
+                    print(f"   ❌ Nota não encontrada após pesquisa: {chave}")
+                    continue
+                
+                # 5. AGORA SIM: Chamar o reprocessamento do AuthManager
+                print("   🔄 Acionando reprocessamento...")
+                success = self.auth_manager.reprocessar_notas_selecionadas()
+                
+                if success:
+                    print(f"   ✅ REPROCESSAMENTO SUCESSO: {chave}")
+                    sucessos += 1
+                    
+                    # Aguardar um pouco após sucesso
+                    time.sleep(3)
+                else:
+                    print(f"   ❌ REPROCESSAMENTO FALHOU: {chave}")
+                
+                # Pequena pausa entre reprocessamentos
+                if i < len(notas_rejeitadas):
+                    time.sleep(2)
+                    
+            except Exception as e:
+                print(f"   ❌ Erro no reprocessamento de {chave}: {e}")
+                continue
+        
+        print(f"\n📊 RESUMO REPROCESSAMENTO INDIVIDUAL:")
+        print(f"   ✅ Sucessos: {sucessos}/{len(notas_rejeitadas)}")
+        print(f"   ❌ Falhas: {len(notas_rejeitadas) - sucessos}/{len(notas_rejeitadas)}")
+        
+        return sucessos > 0
+    
+    def display_batch_results(self, batch_result, notas_rejeitadas):
         """Exibe resultados do processamento em lote"""
         print("\n" + "="*60)
         print("📋 RELATÓRIO FINAL DO PROCESSAMENTO")
@@ -288,7 +331,7 @@ class NFScraperApp:
         print(f"✅ Notas processadas com sucesso: {batch_result['total_notas_processadas']}")
         print(f"❌ Notas com erro: {len(batch_result['notas_com_erro'])}")
         print(f"📊 Total de registros encontrados: {batch_result['total_registros_encontrados']}")
-        print(f"🚫 Notas com rejeições: {batch_result['total_notas_rejeitadas']}")
+        print(f"🚫 Notas rejeitadas: {notas_rejeitadas}")
         
         if batch_result['notas_com_erro']:
             print(f"\n🔴 Notas com erro:")
@@ -352,7 +395,7 @@ class NFScraperApp:
                 'chave_aux': nota_data.get('chave_aux', ''),
                 'status': resultado['status'],
                 'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
-                'protocolo': nota_data.get('protocolo', '')  # Se tiver protocolo do JSON
+                'protocolo': nota_data.get('protocolo', '')
             }
             
             # Adiciona dados completos da consulta
@@ -398,16 +441,30 @@ class NFScraperApp:
         self.navigate_to_initial_page()
         self.perform_full_login()
         
+        # PRIMEIRA CONSULTA
         batch_result = self.search_multiple_invoices()
         
-        print("\n🔄 Iniciando reprocessamento das notas rejeitadas...")
-        success = self.auth_manager.reprocessar_notas_selecionadas()
-        if success:
-            print("✅ Notas reprocessadas com sucesso!")
-        else:
-            print("❌ Falha no reprocessamento - continuando...")
+        # IDENTIFICAR NOTAS REJEITADAS
+        notas_rejeitadas = []
+        for resultado in batch_result['resultados']:
+            status = str(resultado.get('status', ''))
+            if 'Rejeitado' in status or '❌' in status:
+                notas_rejeitadas.append(resultado['nota_data'])
         
-        self.display_batch_results(batch_result)
+        # REPROCESSAMENTO INDIVIDUAL APENAS SE HOUVER NOTAS REJEITADAS
+        if notas_rejeitadas:
+            print(f"\n🔄 INICIANDO REPROCESSAMENTO INDIVIDUAL PARA {len(notas_rejeitadas)} NOTAS REJEITADAS")
+            print("=" * 60)
+            
+            success = self.reprocessar_notas_individualmente(notas_rejeitadas)
+            if success:
+                print("✅ Reprocessamento individual concluído!")
+            else:
+                print("❌ Alguns reprocessamentos individuais falharam")
+        else:
+            print("📝 Nenhuma nota rejeitada para reprocessar")
+        
+        self.display_batch_results(batch_result, len(notas_rejeitadas))
         arquivo_salvo = self.save_results_to_file(batch_result)
         
         print(f"\n✅ Processo Unisys concluído com sucesso!")
