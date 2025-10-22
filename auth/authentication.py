@@ -125,7 +125,7 @@ class AuthManager:
                 break
         
         # Aguardar login e navegação para próxima tela
-        time.sleep(5)
+        time.sleep(3)
         self.page.wait_for_load_state("networkidle")
         logger.info("✅ Primeiro login realizado!")
         return True
@@ -252,7 +252,7 @@ class AuthManager:
         logger.info("🧭 Navegando para tela de pesquisa...")
         
         self.page.wait_for_load_state("networkidle")
-        time.sleep(3)
+        time.sleep(1)
         
         # Estratégia para encontrar botão/link de pesquisa
         search_selectors = [
@@ -272,7 +272,7 @@ class AuthManager:
                 logger.info(f"✅ Navegação para pesquisa com: {selector}")
                 break
         
-        time.sleep(3)
+        time.sleep(1)
         self.page.wait_for_load_state("networkidle")
         logger.info("✅ Navegação para pesquisa concluída!")
     
@@ -405,7 +405,7 @@ class AuthManager:
             # Aguardar tabela de resultados carregar
             try:
                 self.page.wait_for_selector("table", timeout=10000)
-                time.sleep(3)
+                time.sleep(1)
             except:
                 logger.info(f"🔍 Tabela não encontrada - nota não existe: {nota_fiscal}")
                 return {"nota_fiscal": nota_fiscal, "status": "Não tem nota", "dados_completos": {}}
@@ -626,7 +626,7 @@ class AuthManager:
                     return False
                 
                 # Aguardar processamento
-                time.sleep(5)
+                time.sleep(3)
                 self.page.wait_for_load_state("networkidle")
                 logger.info("✅ Reprocessamento concluído com sucesso!")
                 return True

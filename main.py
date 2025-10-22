@@ -256,7 +256,7 @@ class NFScraperApp:
                 print("   ✅ REPROCESSAMENTO DIRETO CONCLUÍDO!")
                 
                 # Aguarda um pouco após sucesso
-                time.sleep(3)
+                time.sleep(2)
                 
                 # Volta para tela de pesquisa para próxima nota
                 print("   🧭 Voltando para tela de pesquisa...")
