@@ -82,18 +82,18 @@ class NFScraperApp:
         """Cria um arquivo JSON de exemplo se não existir"""
         exemplo = [
             {
-                "chave": "35251047508411094037551100000220031339359138",
-                "fiscal_doc_no": "220031",
+                "chave": "35251047508411159007551100000183854341594564",
+                "fiscal_doc_no": "18385",
                 "location_id": "001",
-                "series_no": "1",
+                "series_no": "110",
                 "protocolo": "",
                 "chave_aux": "NF001"
             },
             {
-                "chave": "35251047508411094037551100000220301339362217",
-                "fiscal_doc_no": "220301", 
+                "chave": "35251047508411159007551100000184344341597667", 
+                "fiscal_doc_no": "18434",
                 "location_id": "001",
-                "series_no": "1",
+                "series_no": "110",
                 "protocolo": "",
                 "chave_aux": "NF002"
             }
@@ -168,8 +168,8 @@ class NFScraperApp:
         
         print("✅ Autenticação completa com página extra!")
     
-    def search_single_invoice(self, nota_data):
-        """Pesquisa uma única nota fiscal usando dados do JSON"""
+    def search_single_invoice_with_immediate_reprocess(self, nota_data):
+        """Pesquisa uma única nota fiscal e já reprocessa imediatamente se rejeitada - SEM REPESQUISAR"""
         chave_acesso = nota_data['chave']
         fiscal_doc_no = nota_data.get('fiscal_doc_no', '')
         series_no = nota_data.get('series_no', '')
@@ -179,20 +179,19 @@ class NFScraperApp:
         print(f"   🔢 Série: {series_no}")
         
         try:
-            # Preenche formulário de pesquisa
+            # PRIMEIRA E ÚNICA CONSULTA
             initial_date = get_date_30_days_ago()
-            
-            # USAR A CHAVE DO JSON para pesquisa
             success = self.auth_manager.fill_search_form(initial_date, chave_acesso)
             
             if not success:
                 return {
                     "nota_data": nota_data,
                     "status": "❌ Erro ao pesquisar nota",
-                    "dados_completos": {}
+                    "dados_completos": {},
+                    "reprocessado": False
                 }
             
-            # Extrai todos os dados da nota
+            # Extrai dados da consulta
             dados_completos = self.auth_manager.extract_invoice_data(chave_acesso)
             
             # Extrai status e dados da estrutura correta
@@ -200,16 +199,37 @@ class NFScraperApp:
                 status = dados_completos.get('status', 'Status não encontrado')
                 dados = dados_completos.get('dados_completos', {})
             else:
-                # Se for string direta (método antigo)
                 status = dados_completos
                 dados = {}
             
             print(f"   📊 Status: {status}")
             
+            # VERIFICA SE PRECISA REPROCESSAR IMEDIATAMENTE
+            precisa_reprocessar = 'Rejeitado' in status or '❌' in status
+            
+            if precisa_reprocessar:
+                print(f"   🚫 Nota rejeitada, INICIANDO REPROCESSAMENTO IMEDIATO...")
+                
+                # REPROCESSAMENTO DIRETO - SEM REPESQUISAR
+                sucesso_reprocessamento = self.reprocessar_nota_diretamente()
+                
+                if sucesso_reprocessamento:
+                    status = "✅ REPROCESSADO COM SUCESSO"
+                    reprocessado = True
+                    print(f"   ✅ Status final: REPROCESSADO COM SUCESSO")
+                else:
+                    status = "❌ FALHA NO REPROCESSAMENTO"
+                    reprocessado = False
+                    print(f"   ❌ Status final: FALHA NO REPROCESSAMENTO")
+            else:
+                reprocessado = False
+                print(f"   ✅ Status final: {status}")
+            
             return {
                 "nota_data": nota_data,
                 "status": status,
-                "dados_completos": dados
+                "dados_completos": dados,
+                "reprocessado": reprocessado
             }
             
         except Exception as e:
@@ -218,26 +238,60 @@ class NFScraperApp:
             return {
                 "nota_data": nota_data,
                 "status": error_msg,
-                "dados_completos": {}
+                "dados_completos": {},
+                "reprocessado": False
             }
     
+    def reprocessar_nota_diretamente(self):
+        """Reprocessa a nota diretamente sem repesquisar - usa a nota já encontrada"""
+        try:
+            print("   🔄 EXECUTANDO REPROCESSAMENTO DIRETO...")
+            
+            # 1. Chamar o reprocessamento do AuthManager DIRETAMENTE
+            # A nota já está selecionada/identificada na tela atual
+            print("   🔄 Acionando reprocessamento direto...")
+            success = self.auth_manager.reprocessar_notas_selecionadas()
+            
+            if success:
+                print("   ✅ REPROCESSAMENTO DIRETO CONCLUÍDO!")
+                
+                # Aguarda um pouco após sucesso
+                time.sleep(3)
+                
+                # Volta para tela de pesquisa para próxima nota
+                print("   🧭 Voltando para tela de pesquisa...")
+                self.auth_manager.navigate_to_search_screen()
+                time.sleep(2)
+                
+                return True
+            else:
+                print("   ❌ REPROCESSAMENTO DIRETO FALHOU")
+                return False
+                
+        except Exception as e:
+            print(f"   ❌ Erro no reprocessamento direto: {e}")
+            return False
+    
     def search_multiple_invoices(self):
-        """Pesquisa múltiplas notas fiscais do JSON"""
+        """Pesquisa múltiplas notas fiscais com reprocessamento imediato integrado"""
         resultados = []
         notas_com_erro = []
         
         print(f"🚀 Iniciando busca para {len(self.notas_fiscais)} notas fiscais...")
+        print("💡 MODO: CONSULTA ÚNICA + REPROCESSAMENTO DIRETO")
+        print("=" * 60)
         
         for i, nota_data in enumerate(self.notas_fiscais, 1):
             try:
                 print(f"\n[{i}/{len(self.notas_fiscais)}] Processando nota...")
                 
-                # Pesquisa e obtém dados completos
-                dados_nota = self.search_single_invoice(nota_data)
+                # 🔥 AGORA: Faz a consulta E reprocessamento DIRETO na mesma chamada
+                dados_nota = self.search_single_invoice_with_immediate_reprocess(nota_data)
                 resultados.append(dados_nota)
                 
-                # Pequena pausa entre pesquisas
+                # Pequena pausa entre notas
                 if i < len(self.notas_fiscais):
+                    print("   ⏳ Aguardando antes da próxima nota...")
                     time.sleep(2)
                     
             except Exception as e:
@@ -256,85 +310,25 @@ class NFScraperApp:
             'total_registros_encontrados': len(resultados)
         }
     
-    def reprocessar_notas_individualmente(self, notas_rejeitadas):
-        """Reprocessa CADA nota rejeitada individualmente"""
-        if not notas_rejeitadas:
-            print("📝 Nenhuma nota rejeitada para reprocessar")
-            return True
-        
-        print(f"🔄 INICIANDO REPROCESSAMENTO INDIVIDUAL DE {len(notas_rejeitadas)} NOTAS")
-        print("=" * 60)
-        
-        sucessos = 0
-        for i, nota_data in enumerate(notas_rejeitadas, 1):
-            try:
-                chave = nota_data['chave']
-                print(f"\n[{i}/{len(notas_rejeitadas)}] Reprocessando: {chave}")
-                
-                # 1. Navegar de volta para tela de pesquisa
-                self.auth_manager.navigate_to_search_screen()
-                time.sleep(2)
-                
-                # 2. Pesquisar a nota específica novamente
-                initial_date = get_date_30_days_ago()
-                success = self.auth_manager.fill_search_form(initial_date, chave)
-                
-                if not success:
-                    print(f"   ❌ Falha ao pesquisar nota: {chave}")
-                    continue
-                
-                # 3. Aguardar resultado da pesquisa
-                print("   ⏳ Aguardando resultado da pesquisa...")
-                time.sleep(5)
-                self.page.wait_for_load_state("networkidle")
-                
-                # 4. Extrair dados para encontrar a linha da nota
-                resultado = self.auth_manager.extract_invoice_data(chave)
-                
-                if not resultado or 'Não tem nota' in str(resultado.get('status')):
-                    print(f"   ❌ Nota não encontrada após pesquisa: {chave}")
-                    continue
-                
-                # 5. AGORA SIM: Chamar o reprocessamento do AuthManager
-                print("   🔄 Acionando reprocessamento...")
-                success = self.auth_manager.reprocessar_notas_selecionadas()
-                
-                if success:
-                    print(f"   ✅ REPROCESSAMENTO SUCESSO: {chave}")
-                    sucessos += 1
-                    
-                    # Aguardar um pouco após sucesso
-                    time.sleep(3)
-                else:
-                    print(f"   ❌ REPROCESSAMENTO FALHOU: {chave}")
-                
-                # Pequena pausa entre reprocessamentos
-                if i < len(notas_rejeitadas):
-                    time.sleep(2)
-                    
-            except Exception as e:
-                print(f"   ❌ Erro no reprocessamento de {chave}: {e}")
-                continue
-        
-        print(f"\n📊 RESUMO REPROCESSAMENTO INDIVIDUAL:")
-        print(f"   ✅ Sucessos: {sucessos}/{len(notas_rejeitadas)}")
-        print(f"   ❌ Falhas: {len(notas_rejeitadas) - sucessos}/{len(notas_rejeitadas)}")
-        
-        return sucessos > 0
-    
-    def display_batch_results(self, batch_result, notas_rejeitadas):
+    def display_batch_results(self, batch_result):
         """Exibe resultados do processamento em lote"""
         print("\n" + "="*60)
         print("📋 RELATÓRIO FINAL DO PROCESSAMENTO")
         print("="*60)
         
-        print(f"✅ Notas processadas com sucesso: {batch_result['total_notas_processadas']}")
-        print(f"❌ Notas com erro: {len(batch_result['notas_com_erro'])}")
-        print(f"📊 Total de registros encontrados: {batch_result['total_registros_encontrados']}")
-        print(f"🚫 Notas rejeitadas: {notas_rejeitadas}")
+        # Contadores
+        notas_reprocessadas = sum(1 for r in batch_result['resultados'] if r.get('reprocessado', False))
+        notas_com_sucesso = sum(1 for r in batch_result['resultados'] if '✅' in str(r.get('status', '')) and 'REPROCESSADO' not in str(r.get('status', '')))
+        notas_reprocessadas_sucesso = sum(1 for r in batch_result['resultados'] if 'REPROCESSADO COM SUCESSO' in str(r.get('status', '')))
+        notas_com_erro = sum(1 for r in batch_result['resultados'] if '❌' in str(r.get('status', '')) or 'FALHA' in str(r.get('status', '')))
+        
+        print(f"✅ Notas processadas com sucesso: {notas_com_sucesso}")
+        print(f"🔄 Notas reprocessadas com sucesso: {notas_reprocessadas_sucesso}")
+        print(f"❌ Notas com erro: {notas_com_erro}")
+        print(f"📊 Total de registros processados: {batch_result['total_registros_encontrados']}")
         
         if batch_result['notas_com_erro']:
-            print(f"\n🔴 Notas com erro:")
+            print(f"\n🔴 Notas com erro crítico:")
             for erro in batch_result['notas_com_erro']:
                 print(f"   - {erro['nota_data']['chave']}: {erro['erro']}")
         
@@ -346,22 +340,28 @@ class NFScraperApp:
         for resultado in batch_result['resultados']:
             nota_data = resultado['nota_data']
             status = str(resultado['status'])
+            reprocessado = resultado.get('reprocessado', False)
             
             # Determina o ícone baseado no status
-            if '❌' in status or 'Erro' in status:
+            if '❌' in status or 'Erro' in status or 'FALHA' in status:
                 status_icon = "❌"
             elif 'Rejeitado' in status:
                 status_icon = "🚫"
             elif 'não tem nota' in status.lower():
                 status_icon = "🔍"
+            elif 'REPROCESSADO' in status:
+                status_icon = "🔄"
             else:
                 status_icon = "✅"
+            
+            # Adiciona ícone de reprocessamento se aplicável
+            reprocess_icon = " 🔄" if reprocessado else ""
             
             # Mostra informações adicionais
             info_extra = f" | Fiscal Doc: {nota_data.get('fiscal_doc_no', 'N/A')}"
             info_extra += f" | Série: {nota_data.get('series_no', 'N/A')}"
             
-            print(f"{status_icon} {nota_data['chave']}: {status}{info_extra}")
+            print(f"{status_icon}{reprocess_icon} {nota_data['chave']}: {status}{info_extra}")
     
     def save_results_to_file(self, batch_result, filename=None):
         """Salva os resultados completos em um arquivo CSV na pasta /sheets"""
@@ -394,6 +394,7 @@ class NFScraperApp:
                 'location_id': nota_data.get('location_id', ''),
                 'chave_aux': nota_data.get('chave_aux', ''),
                 'status': resultado['status'],
+                'reprocessado': 'Sim' if resultado.get('reprocessado', False) else 'Não',
                 'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
                 'protocolo': nota_data.get('protocolo', '')
             }
@@ -415,6 +416,7 @@ class NFScraperApp:
                 'location_id': nota_data.get('location_id', ''),
                 'chave_aux': nota_data.get('chave_aux', ''),
                 'status': f"ERRO: {erro['erro']}",
+                'reprocessado': 'Não',
                 'data_consulta': datetime.now().strftime('%d/%m/%Y %H:%M:%S')
             })
         
@@ -430,8 +432,10 @@ class NFScraperApp:
             return None
     
     def executar_fluxo_unisys(self):
-        """Fluxo 1: Unisys (atual) usando JSON"""
+        """Fluxo 1: Unisys (atual) usando JSON com reprocessamento direto"""
         print("🚀 Iniciando Fluxo 1 - Unisys com JSON...")
+        print("🔄 MODO: CONSULTA ÚNICA + REPROCESSAMENTO DIRETO")
+        print("=" * 60)
         
         if not self.notas_fiscais:
             print("❌ Nenhuma nota para processar")
@@ -441,30 +445,10 @@ class NFScraperApp:
         self.navigate_to_initial_page()
         self.perform_full_login()
         
-        # PRIMEIRA CONSULTA
+        # 🔥 AGORA: Só uma chamada - já inclui consulta E reprocessamento DIRETO
         batch_result = self.search_multiple_invoices()
         
-        # IDENTIFICAR NOTAS REJEITADAS
-        notas_rejeitadas = []
-        for resultado in batch_result['resultados']:
-            status = str(resultado.get('status', ''))
-            if 'Rejeitado' in status or '❌' in status:
-                notas_rejeitadas.append(resultado['nota_data'])
-        
-        # REPROCESSAMENTO INDIVIDUAL APENAS SE HOUVER NOTAS REJEITADAS
-        if notas_rejeitadas:
-            print(f"\n🔄 INICIANDO REPROCESSAMENTO INDIVIDUAL PARA {len(notas_rejeitadas)} NOTAS REJEITADAS")
-            print("=" * 60)
-            
-            success = self.reprocessar_notas_individualmente(notas_rejeitadas)
-            if success:
-                print("✅ Reprocessamento individual concluído!")
-            else:
-                print("❌ Alguns reprocessamentos individuais falharam")
-        else:
-            print("📝 Nenhuma nota rejeitada para reprocessar")
-        
-        self.display_batch_results(batch_result, len(notas_rejeitadas))
+        self.display_batch_results(batch_result)
         arquivo_salvo = self.save_results_to_file(batch_result)
         
         print(f"\n✅ Processo Unisys concluído com sucesso!")

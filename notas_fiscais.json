@@ -1,10 +1,4 @@
 [
-  {
-    "chave": "52251047508411160196551100000197884341580233",
-    "fiscal_doc_no": "220031",
-    "location_id": "001", 
-    "series_no": "1",
-    "protocolo": "",
-    "chave_aux": "NF001"
-  }
+  {"chave": "35251047508411159007551100000182774341595393", "fiscal_doc_no": "18277", "location_id": "206", "series_no": "110", "protocolo": "0", "chave_aux": "NF001"},
+  {"chave": "35251047508411159007551100000184404341597672", "fiscal_doc_no": "18440", "location_id": "206", "series_no": "110", "protocolo": "0", "chave_aux": "NF002"}
 ]
