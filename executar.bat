@@ -1,16 +1,11 @@
 @echo off
 echo ====================================
-echo  EXECUTOR NF-SCRAPER
+echo  EXECUTOR DIRETO
 echo ====================================
 
 echo.
-echo 1. Ativando ambiente virtual...
-call "venv\Scripts\activate.bat"
+echo Executando com Python do environment...
+"nf_scraper_env\python.exe" main.py
 
 echo.
-echo 2. Executando aplicação...
-python main.py
-
-echo.
-echo ⏎ Pressione Enter para sair...
 pause
